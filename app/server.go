@@ -13,6 +13,23 @@ var (
 	_ = os.Exit
 )
 
+func echoHandler(conn net.Conn, request []byte) {
+	// parse the request
+	requestString := string(request)
+	reqSlice := strings.Split(requestString, " ")
+	urlPath := reqSlice[1]
+	fmt.Printf("URL Path: %s", urlPath)
+	if !strings.HasPrefix(urlPath, "/echo") {
+		fmt.Printf("\nInvalid URL Path: %s\n", urlPath)
+		conn.Close()
+		return
+	}
+
+	str := strings.Split(urlPath, "/")
+	arg := str[1]
+	fmt.Printf("str: %s, arg: %s\n", str, arg)
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -39,14 +56,17 @@ func main() {
 	var response string
 	if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
 		response = "HTTP/1.1 404 Not Found\r\n\r\n"
-		conn.Close()
-		return
+	} else {
+		response = "HTTP/1.1 200 OK\r\n\r\n"
 	}
 
-	response = "HTTP/1.1 200 OK\r\n\r\n"
 	_, err = conn.Write([]byte(response))
 	if err != nil {
 		fmt.Println("Error writing data", err.Error())
 		os.Exit(1)
 	}
+
+	// if strings.Contains(string(req), "/echo") {
+	// 	echoHandler(conn, req)
+	// }
 }
