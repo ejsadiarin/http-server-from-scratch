@@ -7,46 +7,30 @@ import (
 	"strings"
 )
 
-// Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
-var (
-	_ = net.Listen
-	_ = os.Exit
-)
-
 func echoHandler(urlPath string) (string, error) {
-	str := strings.Split(urlPath, "/")
-	// always expect an arg in url (/echo/<arg>)
-	if len(str) < 3 {
-		fmt.Println("Missing string argument.")
-		return "HTTP/1.1 404 Not Found\r\n\r\n", fmt.Errorf("Missing string argument")
-	}
-	arg := str[2]
-	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(arg), arg)
+	// always expect an arg in url (/echo/<pathParamDynamic>)
+	pathParamDynamic := strings.Split(urlPath, "/")[2]
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(pathParamDynamic), pathParamDynamic)
 	return response, nil
 }
 
 func userAgentHandler(req []byte) (string, error) {
-	if !strings.Contains(string(req), "User-Agent") {
-		// return "HTTP/1.1 404 Not Found\r\n\r\n"
-		return "HTTP/1.1 404 Not Found\r\n\r\n User-Agent not found\r\n", fmt.Errorf("No User-Agent header found.")
+	request := strings.ToLower(string(req))
+	if !strings.Contains(request, "user-agent") {
+		return "HTTP/1.1 404 Not Found\r\n\r\n", fmt.Errorf("no user-agent header found")
 	}
-	lines := strings.Split(string(req), "\r\n")
-	fmt.Printf("Lines (len %d): %v\n", len(lines), lines)
-	for i, line := range lines {
-		fmt.Printf("%d: %s\n", i, line)
-	}
-	var idx int
-	for i, v := range lines {
-		if strings.Contains(v, "User-Agent") {
-			idx = i
+	fmt.Println(request)
+	lines := strings.Split(request, "\r\n")
+	var val string
+	for _, l := range lines {
+		if strings.Contains(l, "user-agent:") {
+			val = strings.TrimSpace(strings.Split(l, ":")[1])
+			fmt.Println("val:", val)
+			break
 		}
 	}
-	UALine := lines[idx]
-	UASlice := strings.Split(UALine, ":")
-	UAValue := strings.TrimSuffix(UASlice[1], "\r\n")
-	UAValue = strings.TrimSpace(UAValue)
-	fmt.Println(UAValue)
-	response := fmt.Sprintf("HTTP/1.1 200 OK\r\n\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(UAValue), UAValue)
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(val), val)
+	fmt.Println(response)
 	return response, nil
 }
 
@@ -54,11 +38,15 @@ func handleConnection(conn net.Conn) {
 	// extract URL path from request
 	defer conn.Close()
 	req := make([]byte, 1024)
-	conn.Read(req)
-	fmt.Println(string(req))
+	n, err := conn.Read(req)
+	if err != nil {
+		fmt.Println("Error reading request:", err)
+		return
+	}
+	requestString := string(req[:n])
 
 	// parse the url path
-	lines := strings.Split(string(req), "\r\n")
+	lines := strings.Split(requestString, "\r\n")
 	if len(lines) < 1 {
 		fmt.Println("Malformed request")
 		return
@@ -68,45 +56,54 @@ func handleConnection(conn net.Conn) {
 		fmt.Println("Malformed request")
 		return
 	}
-	urlPath := requestLine[1]
-	fmt.Printf("URL Path: %s\n", urlPath)
+	pathParam := requestLine[1]
+	fmt.Printf("requestString: %v\n", requestString)
+	fmt.Printf("requestLine: %v\n", requestLine)
+	fmt.Printf("pathParam: %s\n", pathParam)
 
 	// custom mux
 	var response string
-	if urlPath == "/" {
-		response = "HTTP/1.1 200 OK\r\n\r\n"
-	} else if strings.Contains(urlPath, "/echo") {
-		fmt.Println("Contains /echo")
-		// echo handler logic here
-		response, _ = echoHandler(urlPath)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return
-		// }
-	} else if urlPath == "/user-agent" {
-		response, _ = userAgentHandler(req)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return
-		// }
-	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+
+	if pathParam == "/" {
+		// response = "HTTP/1.1 200 OK\r\n\r\n"
+		response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
 	}
 
-	conn.Write([]byte(response))
+	if strings.Contains(pathParam, "/echo") {
+		fmt.Println("Contains /echo")
+		response, err = echoHandler(pathParam)
+		if err != nil {
+			fmt.Println(err)
+			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		}
+		conn.Write([]byte(response))
+	}
+
+	if pathParam == "/user-agent" {
+		response, err = userAgentHandler(req)
+		if err != nil {
+			fmt.Println(err)
+			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		}
+		conn.Write([]byte(response))
+	}
+
+	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+	_, err = conn.Write([]byte(response))
+	if err != nil {
+		fmt.Println("Error writing response:", err)
+	}
 }
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
-
-	// Uncomment this block to pass the first stage
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
+	defer l.Close()
 
 	for {
 		conn, err := l.Accept()
