@@ -49,19 +49,6 @@ func main() {
 	conn.Read(req)
 	fmt.Println(string(req))
 
-	// var response string
-	// if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
-	// 	response = "HTTP/1.1 404 Not Found\r\n\r\n"
-	// } else {
-	// 	response = "HTTP/1.1 200 OK\r\n\r\n"
-	// }
-	//
-	// _, err = conn.Write([]byte(response))
-	// if err != nil {
-	// 	fmt.Println("Error writing data", err.Error())
-	// 	os.Exit(1)
-	// }
-
 	// custom mux
 	// parse the url path
 	lines := strings.Split(string(req), "\r\n")
@@ -76,10 +63,30 @@ func main() {
 	}
 	urlPath := requestLine[1]
 	fmt.Printf("URL Path: %s\n", urlPath)
-	if strings.Contains(urlPath, "/echo") {
+
+	// switch urlPath {
+	// case "/":
+	//        response = "HTTP/1.1 200 OK\r\n\r\n"
+	// case "/echo/...":
+	//    default:
+	//        response = "HTTP/1.1 404 Not Found\r\n\r\n"
+	// }
+	// _, err = conn.Write([]byte(response))
+	// if err != nil {
+	// 	fmt.Println("Error writing data", err.Error())
+	// 	os.Exit(1)
+	// }
+
+	var response string
+	if urlPath == "/" {
+		response = "HTTP/1.1 200 OK\r\n\r\n"
+	} else if strings.Contains(urlPath, "/echo") {
 		fmt.Println("Contains /echo")
 		// echo handler logic here
-		resp := echoHandler(urlPath)
-		conn.Write([]byte(resp))
+		response = echoHandler(urlPath)
+	} else {
+		response = "HTTP/1.1 404 Not Found\r\n\r\n"
 	}
+
+	conn.Write([]byte(response))
 }
