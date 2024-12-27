@@ -13,21 +13,16 @@ var (
 	_ = os.Exit
 )
 
-func echoHandler(conn net.Conn, request []byte) {
-	// parse the request
-	requestString := string(request)
-	reqSlice := strings.Split(requestString, " ")
-	urlPath := reqSlice[1]
-	fmt.Printf("URL Path: %s", urlPath)
-	if !strings.HasPrefix(urlPath, "/echo") {
-		fmt.Printf("\nInvalid URL Path: %s\n", urlPath)
-		conn.Close()
-		return
-	}
-
+func echoHandler(urlPath string) string {
 	str := strings.Split(urlPath, "/")
-	arg := str[1]
-	fmt.Printf("str: %s, arg: %s\n", str, arg)
+	// always expect an arg in url (/echo/<arg>)
+	if len(str) < 3 {
+		fmt.Println("Missing string argument.")
+		return "HTTP/1.1 404 Not Found\r\n\r\n"
+	}
+	arg := str[2]
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(arg), arg)
+	return response
 }
 
 func main() {
@@ -53,20 +48,38 @@ func main() {
 	req := make([]byte, 1024)
 	conn.Read(req)
 	fmt.Println(string(req))
-	var response string
-	if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n"
-	} else {
-		response = "HTTP/1.1 200 OK\r\n\r\n"
-	}
 
-	_, err = conn.Write([]byte(response))
-	if err != nil {
-		fmt.Println("Error writing data", err.Error())
+	// var response string
+	// if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
+	// 	response = "HTTP/1.1 404 Not Found\r\n\r\n"
+	// } else {
+	// 	response = "HTTP/1.1 200 OK\r\n\r\n"
+	// }
+	//
+	// _, err = conn.Write([]byte(response))
+	// if err != nil {
+	// 	fmt.Println("Error writing data", err.Error())
+	// 	os.Exit(1)
+	// }
+
+	// custom mux
+	// parse the url path
+	lines := strings.Split(string(req), "\r\n")
+	if len(lines) < 1 {
+		fmt.Println("Malformed request")
 		os.Exit(1)
 	}
-
-	// if strings.Contains(string(req), "/echo") {
-	// 	echoHandler(conn, req)
-	// }
+	requestLine := strings.Split(lines[0], " ")
+	if len(requestLine) < 2 {
+		fmt.Println("Malformed request")
+		os.Exit(1)
+	}
+	urlPath := requestLine[1]
+	fmt.Printf("URL Path: %s\n", urlPath)
+	if strings.Contains(urlPath, "/echo") {
+		fmt.Println("Contains /echo")
+		// echo handler logic here
+		resp := echoHandler(urlPath)
+		conn.Write([]byte(resp))
+	}
 }
