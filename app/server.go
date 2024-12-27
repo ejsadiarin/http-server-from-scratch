@@ -50,6 +50,52 @@ func userAgentHandler(req []byte) (string, error) {
 	return response, nil
 }
 
+func handleConnection(conn net.Conn) {
+	// extract URL path from request
+	defer conn.Close()
+	req := make([]byte, 1024)
+	conn.Read(req)
+	fmt.Println(string(req))
+
+	// parse the url path
+	lines := strings.Split(string(req), "\r\n")
+	if len(lines) < 1 {
+		fmt.Println("Malformed request")
+		return
+	}
+	requestLine := strings.Split(lines[0], " ")
+	if len(requestLine) < 2 {
+		fmt.Println("Malformed request")
+		return
+	}
+	urlPath := requestLine[1]
+	fmt.Printf("URL Path: %s\n", urlPath)
+
+	// custom mux
+	var response string
+	if urlPath == "/" {
+		response = "HTTP/1.1 200 OK\r\n\r\n"
+	} else if strings.Contains(urlPath, "/echo") {
+		fmt.Println("Contains /echo")
+		// echo handler logic here
+		response, _ = echoHandler(urlPath)
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	return
+		// }
+	} else if urlPath == "/user-agent" {
+		response, _ = userAgentHandler(req)
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	return
+		// }
+	} else {
+		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+	}
+
+	conn.Write([]byte(response))
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -62,66 +108,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	// extract URL path from request
-	req := make([]byte, 1024)
-	conn.Read(req)
-	fmt.Println(string(req))
-
-	// parse the url path
-	lines := strings.Split(string(req), "\r\n")
-	if len(lines) < 1 {
-		fmt.Println("Malformed request")
-		os.Exit(1)
-	}
-	requestLine := strings.Split(lines[0], " ")
-	if len(requestLine) < 2 {
-		fmt.Println("Malformed request")
-		os.Exit(1)
-	}
-	urlPath := requestLine[1]
-	fmt.Printf("URL Path: %s\n", urlPath)
-
-	// switch urlPath {
-	// case "/":
-	//        response = "HTTP/1.1 200 OK\r\n\r\n"
-	// case "/echo/...":
-	//    default:
-	//        response = "HTTP/1.1 404 Not Found\r\n\r\n"
-	// }
-	// _, err = conn.Write([]byte(response))
-	// if err != nil {
-	// 	fmt.Println("Error writing data", err.Error())
-	// 	os.Exit(1)
-	// }
-
-	// custom mux
-	var response string
-	if urlPath == "/" {
-		response = "HTTP/1.1 200 OK\r\n\r\n"
-	} else if strings.Contains(urlPath, "/echo") {
-		fmt.Println("Contains /echo")
-		// echo handler logic here
-		response, err = echoHandler(urlPath)
+	for {
+		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-	} else if urlPath == "/user-agent" {
-		response, err = userAgentHandler(req)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+		go handleConnection(conn)
 	}
-
-	conn.Write([]byte(response))
 }
