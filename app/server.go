@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strings"
@@ -34,27 +33,20 @@ func main() {
 	defer conn.Close()
 
 	// extract URL path from request
-	r, err := io.ReadAll(conn)
-	if err != nil {
-		fmt.Println("Error reading from connection", err.Error())
-		os.Exit(1)
+	req := make([]byte, 1024)
+	conn.Read(req)
+	fmt.Println(string(req))
+	var response string
+	if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
+		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+		conn.Close()
+		return
 	}
-	fmt.Printf("%v\n", string(r))
-	rSlice := strings.Split(string(r), " ")
-	urlPath := rSlice[1]
-	if urlPath == "/" {
-		success := "HTTP/1.1 200 OK\r\n\r\n"
-		_, err = conn.Write([]byte(success))
-		if err != nil {
-			fmt.Println("Error writing data", err.Error())
-			os.Exit(1)
-		}
-	} else {
-		fail := "HTTP/1.1 404 Not Found\r\n\r\n"
-		_, err = conn.Write([]byte(fail))
-		if err != nil {
-			fmt.Println("Error writing data", err.Error())
-			os.Exit(1)
-		}
+
+	response = "HTTP/1.1 200 OK\r\n\r\n"
+	_, err = conn.Write([]byte(response))
+	if err != nil {
+		fmt.Println("Error writing data", err.Error())
+		os.Exit(1)
 	}
 }
