@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
@@ -29,11 +31,30 @@ func main() {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
+	defer conn.Close()
 
-	data := "HTTP/1.1 200 OK\r\n\r\n"
-	_, err = conn.Write([]byte(data))
+	// extract URL path from request
+	r, err := io.ReadAll(conn)
 	if err != nil {
-		fmt.Println("Error writing data", err.Error())
+		fmt.Println("Error reading from connection", err.Error())
 		os.Exit(1)
+	}
+	fmt.Printf("%v\n", string(r))
+	rSlice := strings.Split(string(r), " ")
+	urlPath := rSlice[1]
+	if urlPath == "/" {
+		success := "HTTP/1.1 200 OK\r\n\r\n"
+		_, err = conn.Write([]byte(success))
+		if err != nil {
+			fmt.Println("Error writing data", err.Error())
+			os.Exit(1)
+		}
+	} else {
+		fail := "HTTP/1.1 404 Not Found\r\n\r\n"
+		_, err = conn.Write([]byte(fail))
+		if err != nil {
+			fmt.Println("Error writing data", err.Error())
+			os.Exit(1)
+		}
 	}
 }
