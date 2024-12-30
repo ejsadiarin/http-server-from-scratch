@@ -88,6 +88,16 @@ func handleConnection(conn net.Conn) {
 		conn.Write([]byte(response))
 	}
 
+	if strings.Contains(pathParam, "/files") {
+		filename := strings.Split(pathParam, "/")[2]
+        // TODO: response:
+		// - Content-Type header set to application/octet-stream.
+		// - Content-Length header set to the size of the file, in bytes.
+		// - Response body set to the file contents.
+        fileLength := 
+		response = "HTTP/1.1 200 OK\r\nContent-Length:%d"
+	}
+
 	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 	_, err = conn.Write([]byte(response))
 	if err != nil {
