@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -90,12 +91,27 @@ func handleConnection(conn net.Conn) {
 
 	if strings.Contains(pathParam, "/files") {
 		filename := strings.Split(pathParam, "/")[2]
-        // TODO: response:
+		// TODO: response:
 		// - Content-Type header set to application/octet-stream.
 		// - Content-Length header set to the size of the file, in bytes.
 		// - Response body set to the file contents.
-        fileLength := 
-		response = "HTTP/1.1 200 OK\r\nContent-Length:%d"
+		file, err := os.Open(filename)
+		if err != nil {
+			fmt.Println(err)
+			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		}
+		defer file.Close()
+		finfo, err := file.Stat()
+		if err != nil {
+			fmt.Println(err)
+			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		}
+		contents, err := io.ReadAll(file)
+		if err != nil {
+			fmt.Println(err)
+			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		}
+		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", finfo.Size(), string(contents))
 	}
 
 	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
