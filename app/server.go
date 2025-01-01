@@ -35,7 +35,7 @@ func userAgentHandler(req []byte) (string, error) {
 	return response, nil
 }
 
-func handleFile() {
+func handleFile(pathParam string) (string, error) {
 	filename := strings.Split(pathParam, "/")[2]
 	// TODO: response:
 	// - Content-Type header set to application/octet-stream.
@@ -43,21 +43,23 @@ func handleFile() {
 	// - Response body set to the file contents.
 	file, err := os.Open(filename)
 	if err != nil {
-		fmt.Println(err)
-		response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
 	}
 	defer file.Close()
+
 	finfo, err := file.Stat()
 	if err != nil {
-		fmt.Println(err)
-		response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
 	}
+
 	contents, err := io.ReadAll(file)
 	if err != nil {
-		fmt.Println(err)
-		response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
 	}
-	response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", finfo.Size(), string(contents))
+
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", finfo.Size(), string(contents))
+
+	return response, nil
 }
 
 func handleConnection(conn net.Conn) {
@@ -115,28 +117,12 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if strings.Contains(pathParam, "/files") {
-		filename := strings.Split(pathParam, "/")[2]
-		// TODO: response:
-		// - Content-Type header set to application/octet-stream.
-		// - Content-Length header set to the size of the file, in bytes.
-		// - Response body set to the file contents.
-		file, err := os.Open(filename)
+		response, err = handleFile(pathParam)
 		if err != nil {
 			fmt.Println(err)
 			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 		}
-		defer file.Close()
-		finfo, err := file.Stat()
-		if err != nil {
-			fmt.Println(err)
-			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-		}
-		contents, err := io.ReadAll(file)
-		if err != nil {
-			fmt.Println(err)
-			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-		}
-		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", finfo.Size(), string(contents))
+		conn.Write([]byte(response))
 	}
 
 	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
