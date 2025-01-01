@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// TODO: maybe use "log/slog" for logging errors and prints
+
 func echoHandler(urlPath string) (string, error) {
 	// always expect an arg in url (/echo/<pathParamDynamic>)
 	pathParamDynamic := strings.Split(urlPath, "/")[2]
