@@ -9,6 +9,7 @@ import (
 )
 
 // TODO: maybe use "log/slog" for logging errors and prints
+// TODO: appropriate status codes
 
 func echoHandler(urlPath string) (string, error) {
 	// always expect an arg in url (/echo/<pathParamDynamic>)
@@ -55,18 +56,18 @@ func handleFile(pathParam string, directory string) (string, error) {
 	fmt.Println("filepath: ", filepath)
 	file, err := os.Open(filepath)
 	if err != nil {
-		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
+		return "", err
 	}
 	defer file.Close()
 
 	finfo, err := file.Stat()
 	if err != nil {
-		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
+		return "", err
 	}
 
 	contents, err := io.ReadAll(file)
 	if err != nil {
-		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
+		return "", err
 	}
 	fmt.Println("contents: ", string(contents))
 
@@ -75,6 +76,36 @@ func handleFile(pathParam string, directory string) (string, error) {
 	return response, nil
 }
 
+func handleFilePost(pathParam, directory, requestBody string) (string, error) {
+	filename := strings.Split(pathParam, "/")[2]
+	var filepath string
+	if !(strings.HasSuffix(directory, "/")) {
+		filepath = fmt.Sprintf("%s/%s", directory, filename)
+	} else {
+		filepath = fmt.Sprintf("%s%s", directory, filename)
+	}
+	fmt.Println("filepath: ", filepath)
+
+	_, err := os.Stat(filepath)
+	// if file doesn't exist then return
+	if os.IsExist(err) {
+		return "", fmt.Errorf("file already exists on directory %s: %v", directory, err)
+	}
+
+	file, err := os.Create(filepath)
+	if err != nil {
+		return "", fmt.Errorf("cannot create file: %v", err)
+	}
+	_, err = file.WriteString(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("cannot write string to file %s: %v", filepath, err)
+	}
+
+	response := "HTTP/1.1 201 Created\r\n\r\n"
+	return response, nil
+}
+
+// Assumes length of args is >= 2 already
 func hasArgs() (string, bool) {
 	flag := os.Args[1]
 	switch flag {
@@ -119,6 +150,7 @@ func handleConnection(conn net.Conn) {
 	if pathParam == "/" {
 		// response = "HTTP/1.1 200 OK\r\n\r\n"
 		response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
+		conn.Write([]byte(response))
 	}
 
 	if strings.Contains(pathParam, "/echo") {
@@ -126,7 +158,7 @@ func handleConnection(conn net.Conn) {
 		response, err = echoHandler(pathParam)
 		if err != nil {
 			fmt.Println(err)
-			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			response = "HTTP/1.1 404 Not Found echo\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 		}
 		conn.Write([]byte(response))
 	}
@@ -135,7 +167,7 @@ func handleConnection(conn net.Conn) {
 		response, err = userAgentHandler(req)
 		if err != nil {
 			fmt.Println(err)
-			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			response = "HTTP/1.1 404 Not Found user-agent\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 		}
 		conn.Write([]byte(response))
 	}
@@ -143,19 +175,27 @@ func handleConnection(conn net.Conn) {
 	if strings.Contains(pathParam, "/files") && (len(os.Args) >= 2) {
 		directory, exists := hasArgs()
 		if exists {
-			response, err = handleFile(pathParam, directory)
-			if err != nil {
-				fmt.Println(err)
-				response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			method := requestLine[0]
+			switch method {
+			case "GET":
+				response, err = handleFile(pathParam, directory)
+				if err != nil {
+					fmt.Println(err)
+					response = "HTTP/1.1 404 Not Found files get\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+				}
+			case "POST":
+				requestBody := strings.Split(requestString, "\r\n\r\n")[1]
+				response, err = handleFilePost(pathParam, directory, requestBody)
+				if err != nil {
+					fmt.Println(err)
+					response = "HTTP/1.1 404 Not Found files post\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+				}
+			default:
+				fmt.Println("Unsupported method")
+				return
 			}
 			conn.Write([]byte(response))
 		}
-	}
-
-	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-	_, err = conn.Write([]byte(response))
-	if err != nil {
-		fmt.Println("Error writing response:", err)
 	}
 }
 
