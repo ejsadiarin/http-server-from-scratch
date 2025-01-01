@@ -35,13 +35,24 @@ func userAgentHandler(req []byte) (string, error) {
 	return response, nil
 }
 
-func handleFile(pathParam string) (string, error) {
+func handleFile(pathParam string, directory string) (string, error) {
 	filename := strings.Split(pathParam, "/")[2]
 	// TODO: response:
 	// - Content-Type header set to application/octet-stream.
 	// - Content-Length header set to the size of the file, in bytes.
 	// - Response body set to the file contents.
-	file, err := os.Open(filename)
+	fmt.Println("filename: ", filename)
+
+	// if directory don't have "/" then add "/" suffix
+	var filepath string
+	if !(strings.HasSuffix(directory, "/")) {
+		// add "/" suffix
+		filepath = fmt.Sprintf("%s/%s", directory, filename)
+	} else {
+		filepath = fmt.Sprintf("%s%s", directory, filename)
+	}
+	fmt.Println("filepath: ", filepath)
+	file, err := os.Open(filepath)
 	if err != nil {
 		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
 	}
@@ -56,10 +67,22 @@ func handleFile(pathParam string) (string, error) {
 	if err != nil {
 		return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", err
 	}
+	fmt.Println("contents: ", string(contents))
 
 	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", finfo.Size(), string(contents))
 
 	return response, nil
+}
+
+func hasArgs() (string, bool) {
+	flag := os.Args[1]
+	switch flag {
+	case "--directory":
+		d := os.Args[2]
+		return d, true
+	default:
+		return "", false
+	}
 }
 
 func handleConnection(conn net.Conn) {
@@ -116,13 +139,16 @@ func handleConnection(conn net.Conn) {
 		conn.Write([]byte(response))
 	}
 
-	if strings.Contains(pathParam, "/files") {
-		response, err = handleFile(pathParam)
-		if err != nil {
-			fmt.Println(err)
-			response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+	if strings.Contains(pathParam, "/files") && (len(os.Args) >= 2) {
+		directory, exists := hasArgs()
+		if exists {
+			response, err = handleFile(pathParam, directory)
+			if err != nil {
+				fmt.Println(err)
+				response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			}
+			conn.Write([]byte(response))
 		}
-		conn.Write([]byte(response))
 	}
 
 	response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
