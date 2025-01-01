@@ -35,6 +35,9 @@ func userAgentHandler(req []byte) (string, error) {
 	return response, nil
 }
 
+func handleFile() {
+}
+
 func handleConnection(conn net.Conn) {
 	// extract URL path from request
 	defer conn.Close()
