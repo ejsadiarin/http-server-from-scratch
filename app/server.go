@@ -35,18 +35,17 @@ func userAgentHandler(req []byte) (string, error) {
 	return response, nil
 }
 
+// REQUIREMENTS:
+// - Content-Type header set to application/octet-stream.
+// - Content-Length header set to the size of the file, in bytes.
+// - Response body set to the file contents.
 func handleFile(pathParam string, directory string) (string, error) {
 	filename := strings.Split(pathParam, "/")[2]
-	// TODO: response:
-	// - Content-Type header set to application/octet-stream.
-	// - Content-Length header set to the size of the file, in bytes.
-	// - Response body set to the file contents.
 	fmt.Println("filename: ", filename)
 
 	// if directory don't have "/" then add "/" suffix
 	var filepath string
 	if !(strings.HasSuffix(directory, "/")) {
-		// add "/" suffix
 		filepath = fmt.Sprintf("%s/%s", directory, filename)
 	} else {
 		filepath = fmt.Sprintf("%s%s", directory, filename)
