@@ -1,26 +1,30 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"strings"
 )
 
-// TODO: maybe use "log/slog" for logging errors and prints
 // TODO: appropriate status codes
+// TODO: use a struct-based approach
 
 func echoHandler(urlPath string) (string, error) {
 	// always expect an arg in url (/echo/<pathParamDynamic>)
 	pathParamDynamic := strings.Split(urlPath, "/")[2]
 	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(pathParamDynamic), pathParamDynamic)
+	slog.Log(context.TODO(), slog.LevelInfo, "echo handler test")
 	return response, nil
 }
 
 func userAgentHandler(req []byte) (string, error) {
 	request := strings.ToLower(string(req))
 	if !strings.Contains(request, "user-agent") {
+		slog.Log(context.TODO(), slog.LevelError, "request doesn't include /user-agent")
 		return "HTTP/1.1 404 Not Found\r\n\r\n", fmt.Errorf("no user-agent header found")
 	}
 	fmt.Println(request)
@@ -56,17 +60,20 @@ func handleFile(pathParam string, directory string) (string, error) {
 	fmt.Println("filepath: ", filepath)
 	file, err := os.Open(filepath)
 	if err != nil {
+		slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("cannot open file: %s", filepath))
 		return "", err
 	}
 	defer file.Close()
 
 	finfo, err := file.Stat()
 	if err != nil {
+		slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("finfo error: %v", err))
 		return "", err
 	}
 
 	contents, err := io.ReadAll(file)
 	if err != nil {
+		slog.Log(context.TODO(), slog.LevelError, "cannot read contents of file via io.ReadAll()")
 		return "", err
 	}
 	fmt.Println("contents: ", string(contents))
@@ -89,15 +96,18 @@ func handleFilePost(pathParam, directory, requestBody string) (string, error) {
 	_, err := os.Stat(filepath)
 	// if file doesn't exist then return
 	if os.IsExist(err) {
+		slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("file already exists on directory: %s", directory))
 		return "", fmt.Errorf("file already exists on directory %s: %v", directory, err)
 	}
 
 	file, err := os.Create(filepath)
 	if err != nil {
+		slog.Log(context.TODO(), slog.LevelError, "cannot create file")
 		return "", fmt.Errorf("cannot create file: %v", err)
 	}
 	_, err = file.WriteString(requestBody)
 	if err != nil {
+		slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("cannot write string to file %s", filepath))
 		return "", fmt.Errorf("cannot write string to file %s: %v", filepath, err)
 	}
 
@@ -123,7 +133,7 @@ func handleConnection(conn net.Conn) {
 	req := make([]byte, 1024)
 	n, err := conn.Read(req)
 	if err != nil {
-		fmt.Println("Error reading request:", err)
+		slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error reading request: %v", err))
 		return
 	}
 	requestString := string(req[:n])
@@ -131,12 +141,12 @@ func handleConnection(conn net.Conn) {
 	// parse the url path
 	lines := strings.Split(requestString, "\r\n")
 	if len(lines) < 1 {
-		fmt.Println("Malformed request")
+		slog.Log(context.TODO(), slog.LevelError, "malformed request")
 		return
 	}
 	requestLine := strings.Split(lines[0], " ")
 	if len(requestLine) < 2 {
-		fmt.Println("Malformed request")
+		slog.Log(context.TODO(), slog.LevelError, "malformed request")
 		return
 	}
 	pathParam := requestLine[1]
@@ -157,7 +167,7 @@ func handleConnection(conn net.Conn) {
 		fmt.Println("Contains /echo")
 		response, err = echoHandler(pathParam)
 		if err != nil {
-			fmt.Println(err)
+			slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on echoHandler: %v", err))
 			response = "HTTP/1.1 404 Not Found echo\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 		}
 		conn.Write([]byte(response))
@@ -166,7 +176,7 @@ func handleConnection(conn net.Conn) {
 	if pathParam == "/user-agent" {
 		response, err = userAgentHandler(req)
 		if err != nil {
-			fmt.Println(err)
+			slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on userAgentHandler: %v", err))
 			response = "HTTP/1.1 404 Not Found user-agent\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 		}
 		conn.Write([]byte(response))
@@ -180,18 +190,18 @@ func handleConnection(conn net.Conn) {
 			case "GET":
 				response, err = handleFile(pathParam, directory)
 				if err != nil {
-					fmt.Println(err)
+					slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on handleFile: %v", err))
 					response = "HTTP/1.1 404 Not Found files get\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				}
 			case "POST":
 				requestBody := strings.Split(requestString, "\r\n\r\n")[1]
 				response, err = handleFilePost(pathParam, directory, requestBody)
 				if err != nil {
-					fmt.Println(err)
+					slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on handleFilePost: %v", err))
 					response = "HTTP/1.1 404 Not Found files post\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				}
 			default:
-				fmt.Println("Unsupported method")
+				slog.Log(context.TODO(), slog.LevelError, "Unsupported method")
 				return
 			}
 			conn.Write([]byte(response))
@@ -204,7 +214,7 @@ func main() {
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
-		fmt.Println("Failed to bind to port 4221")
+		slog.Log(context.TODO(), slog.LevelError, "failed to bind to port 4221")
 		os.Exit(1)
 	}
 	defer l.Close()
@@ -212,7 +222,7 @@ func main() {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
+			slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error accepting connections: %v ", err))
 			os.Exit(1)
 		}
 		go handleConnection(conn)
