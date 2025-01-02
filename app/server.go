@@ -127,6 +127,13 @@ func hasArgs() (string, bool) {
 	}
 }
 
+func gzipCompression() {
+	// TODO: gzipCompression
+	// - read request header "Accept-Encoding"
+	//      - only accept "gzip" as value
+	// - if has gzip, respond with "Content-Encoding: gzip", otherwise omit "Content-Encoding" header in response
+}
+
 func handleConnection(conn net.Conn) {
 	// extract URL path from request
 	defer conn.Close()
