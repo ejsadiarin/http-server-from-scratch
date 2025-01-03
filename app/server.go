@@ -127,11 +127,33 @@ func hasArgs() (string, bool) {
 	}
 }
 
-func gzipCompression() {
-	// TODO: gzipCompression
-	// - read request header "Accept-Encoding"
-	//      - only accept "gzip" as value
-	// - if has gzip, respond with "Content-Encoding: gzip", otherwise omit "Content-Encoding" header in response
+func gzipCompression(requestLines []string, response string) (string, error) {
+	var encodingLine string
+	for _, v := range requestLines {
+		if strings.Contains(v, "Accept-Encoding:") {
+			encodingLine = v
+		}
+	}
+	fmt.Printf("encodingLine: %s\n", encodingLine)
+	valSlice := strings.Split(encodingLine, " ")[1:]
+	val := strings.Join(valSlice, " ")
+	fmt.Printf("Accept-Encoding value (val): %s\n", val)
+	// slog.Info("Accept-Encoding value (val): %s", val)
+
+	// invalid case
+	if !strings.Contains(val, "gzip") {
+		slog.Error("Unsupported Accept-Encoding value. Only gzip is supported.")
+		// just return response without the Content-Encoding header
+		return response, nil
+	}
+
+	// if valid then append Content-Encoding: gzip to response headers
+	// compress response body with gzip
+	responseSlice := strings.Split(response, "\r\n\r\n")
+	responseHeaders := responseSlice[0]
+	responseBody := responseSlice[1]
+	finalResponse := fmt.Sprintf("%s\r\nContent-Encoding: gzip\r\n\r\n%v", responseHeaders, responseBody)
+	return finalResponse, nil
 }
 
 func handleConnection(conn net.Conn) {
@@ -156,7 +178,9 @@ func handleConnection(conn net.Conn) {
 		slog.Log(context.TODO(), slog.LevelError, "malformed request")
 		return
 	}
+	method := requestLine[0]
 	pathParam := requestLine[1]
+	fmt.Printf("method: %v\n", method)
 	fmt.Printf("requestString: %v\n", requestString)
 	fmt.Printf("requestLine: %v\n", requestLine)
 	fmt.Printf("pathParam: %s\n", pathParam)
@@ -164,6 +188,7 @@ func handleConnection(conn net.Conn) {
 	// custom mux
 	var response string
 
+	// gzip "middleware"
 	if pathParam == "/" {
 		// response = "HTTP/1.1 200 OK\r\n\r\n"
 		response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
@@ -176,7 +201,18 @@ func handleConnection(conn net.Conn) {
 		if err != nil {
 			slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on echoHandler: %v", err))
 			response = "HTTP/1.1 404 Not Found echo\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			conn.Write([]byte(response))
+			return
 		}
+		// gzip middleware
+		response, err := gzipCompression(lines, response)
+		if err != nil {
+			slog.Log(context.TODO(), slog.LevelError, fmt.Sprintf("error on gzip-echoHandler: %v", err))
+			response = "HTTP/1.1 404 Not Found echo\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+			conn.Write([]byte(response))
+			return
+		}
+		fmt.Println("echo echo")
 		conn.Write([]byte(response))
 	}
 
@@ -192,7 +228,6 @@ func handleConnection(conn net.Conn) {
 	if strings.Contains(pathParam, "/files") && (len(os.Args) >= 2) {
 		directory, exists := hasArgs()
 		if exists {
-			method := requestLine[0]
 			switch method {
 			case "GET":
 				response, err = handleFile(pathParam, directory)
