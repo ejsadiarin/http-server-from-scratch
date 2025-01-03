@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -148,11 +150,33 @@ func gzipCompression(requestLines []string, response string) (string, error) {
 	}
 
 	// if valid then append Content-Encoding: gzip to response headers
-	// compress response body with gzip
 	responseSlice := strings.Split(response, "\r\n\r\n")
-	responseHeaders := responseSlice[0]
 	responseBody := responseSlice[1]
-	finalResponse := fmt.Sprintf("%s\r\nContent-Encoding: gzip\r\n\r\n%v", responseHeaders, responseBody)
+	fmt.Println("responseBody:", responseBody)
+	// compress response body with gzip
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	_, err := w.Write([]byte(responseBody))
+	if err != nil {
+		slog.Error("Error when compressing response body")
+		return "", err
+	}
+	w.Close()
+	responseBody = b.String()
+	finalResponse := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%v", b.Len(), responseBody)
+
+	fmt.Println("--test gzip data--")
+	r, err := gzip.NewReader(&b)
+	if err != nil {
+		fmt.Println("Error creating gzip reader:", err)
+	}
+	decompressedBody, err := io.ReadAll(r)
+	if err != nil {
+		fmt.Println("Error creating gzip reader:", err)
+	}
+	fmt.Println("Decompressed Body:", string(decompressedBody))
+	fmt.Println("--test gzip data end--")
+
 	return finalResponse, nil
 }
 
@@ -212,7 +236,6 @@ func handleConnection(conn net.Conn) {
 			conn.Write([]byte(response))
 			return
 		}
-		fmt.Println("echo echo")
 		conn.Write([]byte(response))
 	}
 
